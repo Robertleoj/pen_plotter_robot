@@ -12,14 +12,14 @@
 #     name: python3
 # ---
 
-# %matplotlib widget
+# # %matplotlib widget
 from scipy.optimize import minimize
 import numpy as np
 import matplotlib.pyplot as plt
 
 # +
-arm_length = 200
-forearm_length = 200
+arm_length = 196.15
+forearm_length = 186.321 + 6.1
 
 def forward_kinematics(configuration: np.ndarray, L1: float, L2: float) -> np.ndarray:
     assert configuration.shape == (2,)
@@ -47,20 +47,75 @@ def closest_ik(target, current_angles, L1, L2):
         bounds=[(-np.pi / 2, np.pi / 2), (-3 * np.pi / 4, 3 * np.pi / 4)],  # Joint limits
         options={"disp": False}
     )
-    print(result)
+    # print(result)
     return result.x if result.success else None
 
 
 # +
-square_size = 100
-square_center = np.array([0, 200])
+def get_square():
+    square_size = 100
+    square_center = np.array([0, 300])
 
-targets = np.array([
-    square_center + np.array([-square_size / 2, square_size / 2]),
-    square_center + np.array([square_size / 2, square_size / 2]),
-    square_center + np.array([square_size / 2, -square_size / 2]),
-    square_center + np.array([-square_size / 2, -square_size / 2]),
-])
+    targets = np.array([
+        square_center + np.array([-square_size / 2, square_size / 2]),
+        square_center + np.array([square_size / 2, square_size / 2]),
+        square_center + np.array([square_size / 2, -square_size / 2]),
+        square_center + np.array([-square_size / 2, -square_size / 2]),
+    ])
+    return targets
+
+def get_circle():
+    circle_center = np.array([0, 250])
+    circle_radius = 50
+    circle_points = np.array([circle_center + circle_radius * np.array([np.cos(theta), np.sin(theta)]) for theta in np.linspace(0, 2 * np.pi, 20)])
+    return circle_points
+
+
+def center_points(points, center, size):
+    x_range = np.max(points[:, 0]) - np.min(points[:, 0])
+    y_range = np.max(points[:, 1]) - np.min(points[:, 1])
+
+    scale = max(x_range, y_range) / size
+
+    points = (points - np.mean(points, axis=0)) / scale + center
+
+    return points
+
+    
+
+def get_heart(num_points: int = 1000):
+    # Scale and position parameters
+    scale = 50
+    center = np.array([0, 250])
+    
+    # Generate points for the heart curve
+    t = np.linspace(0, 2*np.pi, num_points)
+    x = 16 * np.sin(t)**3
+    y = 13 * np.cos(t) - 5 * np.cos(2*t) - 2 * np.cos(3*t) - np.cos(4*t)
+    
+    # Scale and translate the points
+    points = np.column_stack([x, y])
+    points = scale * points
+    points = points + center
+
+    return points
+
+
+
+
+# -
+
+targets = get_heart(100)
+targets = center_points(targets, np.array([0, 250]), 100)
+
+# +
+# generate a circle of points
+fig, ax = plt.subplots(figsize=(10, 10))
+ax.scatter(targets[:, 0], targets[:, 1], c='green')
+ax.axis('equal')
+plt.show()
+
+
 # -
 
 current_angles = np.array([0, 0])
@@ -73,7 +128,8 @@ for target in targets:
     outputs.append(output)
     current_angles = output
 
-outputs
+outputs = np.array(outputs)
+outputs.shape
 
 
 # +
@@ -131,6 +187,85 @@ for ax, output in zip(axes.flatten(), outputs):
 fig.tight_layout()
 
 plt.show()
+
+# +
+import matplotlib.animation as animation
+
+def animate_configurations(outputs, L1, L2):
+    fig, ax = plt.subplots(figsize=(8, 8))
+    
+    def init():
+        ax.set_xlim(-400, 400)
+        ax.set_ylim(-20, 400)
+        ax.set_aspect('equal')
+        return []
+    
+    def animate(frame):
+        ax.clear()
+        ax.set_xlim(-400, 400)
+        ax.set_ylim(-20, 400)
+        ax.set_aspect('equal')
+        
+        # Your existing plotting logic
+        plot_configuration(outputs[frame], L1, L2, ax=ax)
+        ax.scatter(targets[:, 0], targets[:, 1], c='red')
+        return []
+    
+    anim = animation.FuncAnimation(
+        fig, 
+        animate,
+        init_func=init,
+        frames=len(outputs),
+        interval=100,  # Time between frames in milliseconds
+        blit=True
+    )
+    
+    plt.close()  # Prevents duplicate display in notebooks
+    return anim
+
+num_plot_points = 30
+every_n_points = int(len(outputs) / num_plot_points)
+# Create and display the animation
+anim = animate_configurations(outputs[::every_n_points], arm_length, forearm_length)
+from IPython.display import HTML
+HTML(anim.to_jshtml())
 # -
 
 outputs
+
+# +
+# ... existing imports ...
+import serial
+import struct
+import time
+
+ser = serial.Serial(
+    port='/dev/ttyUSB1',  # Adjust port as needed
+    baudrate=115200,
+    timeout=1
+)
+
+def send_target(angles):
+    """Send a pair of angles over serial.
+    Formats as binary: <theta><phi> (2 floats = 8 bytes)
+    """
+    # Pack two float32s into binary data
+    ser.write(f"{angles[0]}\n{angles[1]}\n".encode('utf-8'))
+    # Small delay to prevent overwhelming the serial buffer
+    time.sleep(0.01)
+
+# Send all targets
+try:
+    for target in outputs:
+        send_target(target)
+    ser.write(b'\n')
+    print(f"Sent {len(outputs)} targets")
+    while True:
+        print(ser.readline())
+
+finally:
+    ser.close()
+
+# read responses forever
+
+

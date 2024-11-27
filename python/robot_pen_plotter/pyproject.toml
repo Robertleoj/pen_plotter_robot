@@ -15,6 +15,8 @@ sympy = "^1.13.3"
 matplotlib = "^3.9.2"
 ikpy = "^3.4.2"
 ipympl = "^0.9.4"
+pyserial = "^3.5"
+esptool = "^4.8.1"
 
 
 [tool.poetry.group.dev.dependencies]
