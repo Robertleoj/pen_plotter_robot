@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import math
 import mediapipe as mp
+from plotter import Plotter
 
 mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils
@@ -15,21 +16,60 @@ DISTANCE_THRESHOLD = 0.05
 drawn_lines: list[list[np.ndarray]] = []
 curr_drawn_line = []
 
+def draw_hand(frame: np.ndarray, hand_landmarks: mp.solutions.hands.HandLandmark) -> None:
+
+    for id, lm in enumerate(hand_landmarks.landmark):
+        h, w, c = frame.shape
+        cx, cy = int(lm.x * w), int(lm.y * h)
+
+        print(lm.x, lm.y)
+
+        color = (255, 0, 255)
+        radius = 3
+
+        if id == INDEX_FINGER_TIP:
+            color = (0, 255, 0)
+            radius = 5
+
+        elif id == THUMB_TIP:
+            color = (0, 0, 255)
+            radius = 5
+
+        cv2.circle(frame, (cx, cy), radius, color, cv2.FILLED)
+
+        # draw the id
+        cv2.putText(
+            frame,
+            str(id),
+            (cx, cy),
+            cv2.FONT_HERSHEY_PLAIN,
+            2,
+            (0, 0, 0),
+            2,
+        )
+
 
 def main():
     global drawn_lines
     global curr_drawn_line
 
+    plotter = Plotter(
+        serial_port="/dev/ttyACM0",
+        x_input_range=(0, 1),
+        y_input_range=(0, 1),
+    )
+
     cap = cv2.VideoCapture(0)
     hands = mp_hands.Hands(
         static_image_mode=False,
-        max_num_hands=1,
+        max_num_hands=2,
         min_detection_confidence=0.7,
         min_tracking_confidence=0.5,
     )
 
     while True:
         ret, frame = cap.read()
+        h, w, _ = frame.shape
         # ummirror
         frame = cv2.flip(frame, 1)
 
@@ -38,54 +78,66 @@ def main():
 
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = hands.process(frame_rgb)
-        if results.multi_hand_landmarks:
-            for hand_landmarks in results.multi_hand_landmarks:
-                for id, lm in enumerate(hand_landmarks.landmark):
-                    h, w, c = frame.shape
-                    cx, cy = int(lm.x * w), int(lm.y * h)
 
-                    print(lm.x, lm.y)
+        if results.multi_hand_landmarks is not None and len(results.multi_hand_landmarks) == 2:
+            hand_1_coords = np.array([
+                [lm.x, lm.y]
+                for lm in results.multi_hand_landmarks[0].landmark
+            ])
 
-                    color = (255, 0, 255)
-                    radius = 3
+            hand_2_coords = np.array([
+                [lm.x, lm.y]
+                for lm in results.multi_hand_landmarks[1].landmark
+            ])
 
-                    if id == INDEX_FINGER_TIP:
-                        color = (0, 255, 0)
-                        radius = 5
+            # hand with lower x-coordinate is the left hand
+            if hand_1_coords[:, 0].mean() < hand_2_coords[:, 0].mean():
+                # left_hand_idx, right_hand_idx = 0, 1
+                left_hand_coords, right_hand_coords = hand_1_coords, hand_2_coords
+            else:
+                # left_hand_idx, right_hand_idx = 1, 0
+                left_hand_coords, right_hand_coords = hand_2_coords, hand_1_coords
 
-                    elif id == THUMB_TIP:
-                        color = (0, 0, 255)
-                        radius = 5
+            # left_hand_landmarks = results.multi_hand_landmarks[left_hand_idx]
+            # right_hand_landmarks = results.multi_hand_landmarks[right_hand_idx]
 
-                    cv2.circle(frame, (cx, cy), radius, color, cv2.FILLED)
+            # draw_hand(frame, left_hand_landmarks)
+            # draw_hand(frame, right_hand_landmarks)
 
-                    # draw the id
-                    cv2.putText(
-                        frame,
-                        str(id),
-                        (cx, cy),
-                        cv2.FONT_HERSHEY_PLAIN,
-                        2,
-                        (0, 0, 0),
-                        2,
-                    )
 
-                index_finger_tip = hand_landmarks.landmark[INDEX_FINGER_TIP]
-                index_loc = np.array([index_finger_tip.x, index_finger_tip.y])
 
-                thumb_tip = hand_landmarks.landmark[THUMB_TIP]
-                thumb_loc = np.array([thumb_tip.x, thumb_tip.y])
+            # check if the left hand is pinching
 
-                distance = np.linalg.norm(index_loc - thumb_loc)
+            left_index_loc = left_hand_coords[INDEX_FINGER_TIP]
+            left_thumb_loc = left_hand_coords[THUMB_TIP]
+            right_index_loc = right_hand_coords[INDEX_FINGER_TIP]
 
-                if distance < DISTANCE_THRESHOLD:
-                    midpoint = (index_loc + thumb_loc) / 2
-                    curr_drawn_line.append(midpoint)
+            right_left_index_distance = np.linalg.norm(right_index_loc - left_index_loc)
 
-                else:
-                    if len(curr_drawn_line) > 1:
-                        drawn_lines.append(curr_drawn_line)
-                        curr_drawn_line = []
+            if right_left_index_distance < DISTANCE_THRESHOLD:
+                plotter.home()
+                break
+
+            left_thumb_index_distance = np.linalg.norm(left_index_loc - left_thumb_loc)
+
+            if left_thumb_index_distance < DISTANCE_THRESHOLD:
+                right_index_loc = right_hand_coords[INDEX_FINGER_TIP]
+
+                curr_drawn_line.append(right_index_loc)
+
+                plotter.move_to(np.array([
+                    right_index_loc[0],
+                    1 - right_index_loc[1],
+                ]))
+
+                if len(curr_drawn_line) == 1:
+                    plotter.pendown()
+
+            else:
+                if len(curr_drawn_line) >= 1:
+                    drawn_lines.append(curr_drawn_line)
+                    curr_drawn_line = []
+                    plotter.penup()
 
         # draw a line between all points in drawn
         for drawn in drawn_lines:
@@ -114,6 +166,10 @@ def main():
         out = cv2.waitKey(1)
         if out == ord("q"):
             break
+
+    plotter.wait_until_done()
+    cap.release()
+    cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":

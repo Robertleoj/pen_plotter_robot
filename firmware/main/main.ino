@@ -1,4 +1,4 @@
-#include <CircularBuffer.h>
+#include <CircularBuffer.hpp>
 #include <Servo.h>
 #include <AccelStepper.h>
 #include <MultiStepper.h>
@@ -58,15 +58,43 @@ Servo servo;
 
 MultiStepper steppers;
 
-float baseStepperSpeed = 1500.0;
+// float baseStepperSpeed = 1500.0;
 
-float elbowStepperSpeed = 1500.0;
+// float elbowStepperSpeed = 1500.0;
+
+const float speedWhenPendown = 1000.0;
+const float speedWhenPenup = 2000.0;
 
 uint8_t targetIndex = 0;
 
 bool motorOn = false;
 
-CircularBuffer<Instruction, MAX_TARGETS> instructionBuffer;
+int splitString(String str, String* array, int maxSize, char delimiter) {
+    int count = 0;
+    int lastIndex = 0;
+    int strLength = str.length();
+    
+    for (int i = 0; i <= strLength; i++) {
+        if (i == strLength || str.charAt(i) == delimiter) {
+            if (count >= maxSize) {
+                break;
+            }
+            
+            array[count] = str.substring(lastIndex, i);
+            array[count].trim();
+            count++;
+            lastIndex = i + 1;
+        }
+    }
+    
+    return count;
+}
+
+
+void setSpeed(float speed) {
+    baseStepper.setMaxSpeed(speed);
+    elbowStepper.setMaxSpeed(speed);
+}
 
 long radians2steps(float radians, StepperConfig config) {
     float deg = radians * 180.0 / PI;
@@ -83,68 +111,68 @@ long radiansToStepsElbow(float radians, StepperConfig config) {
     return radians2steps(radians, config);
 }
 
-int receiveInstructions() {
-    Serial.println("Receiving instructions");
+// int receiveInstructions() {
+//     Serial.println("Receiving instructions");
 
-    instructionBuffer.push(Instruction{InstructionType::PEN_UP});
+//     instructionBuffer.push(Instruction{InstructionType::PEN_UP});
 
-    // wait until data is available
-    while (Serial.available() == 0) {
-        delay(100);
-    }
+//     // wait until data is available
+//     while (Serial.available() == 0) {
+//         delay(100);
+//     }
 
-    int coordinateIndex = 0;
+//     int coordinateIndex = 0;
 
-    int numReceived = 0;
+//     int numReceived = 0;
 
-    float coordinates[2];
+//     float coordinates[2];
 
-    while (numReceived < MAX_TARGETS) {  // Prevent buffer overflow
-        if (!Serial.available()) {
-            delay(10);  // Small delay if no data available
-            continue;
-        }
+//     while (numReceived < MAX_TARGETS) {  // Prevent buffer overflow
+//         if (!Serial.available()) {
+//             delay(10);  // Small delay if no data available
+//             continue;
+//         }
 
-        // delay(10);
+//         // delay(10);
 
-        String line = Serial.readStringUntil('\n');
-        line.trim();  // Remove whitespace
+//         String line = Serial.readStringUntil('\n');
+//         line.trim();  // Remove whitespace
 
-        Serial.println("line:" + line + " Index:" + String(numReceived));
+//         Serial.println("line:" + line + " Index:" + String(numReceived));
 
-        // Check for end of transmission or empty line
-        if (line.length() == 0) {
-            break;
-        }
+//         // Check for end of transmission or empty line
+//         if (line.length() == 0) {
+//             break;
+//         }
 
-        // Parse float and check for validity
-        float value = line.toFloat();
-        if (value == 0 && line.charAt(0) != '0') {  // Basic error check
-            Serial.println("Parse error");
-            return -3;  // Parse error
-        }
+//         // Parse float and check for validity
+//         float value = line.toFloat();
+//         if (value == 0 && line.charAt(0) != '0') {  // Basic error check
+//             Serial.println("Parse error");
+//             return -3;  // Parse error
+//         }
 
-        coordinates[coordinateIndex] = value;
+//         coordinates[coordinateIndex] = value;
 
-        coordinateIndex++;
+//         coordinateIndex++;
 
-        if (coordinateIndex == 2) {
-            instructionBuffer.push(Instruction{InstructionType::MOVE_TO, {coordinates[0], coordinates[1]}});
-            if (numReceived == 1) {
-                instructionBuffer.push(Instruction{InstructionType::PEN_DOWN});
-            }
-            coordinateIndex = 0;
-            numReceived ++;
-        }
+//         if (coordinateIndex == 2) {
+//             instructionBuffer.push(Instruction{InstructionType::MOVE_TO, {coordinates[0], coordinates[1]}});
+//             if (numReceived == 1) {
+//                 instructionBuffer.push(Instruction{InstructionType::PEN_DOWN});
+//             }
+//             coordinateIndex = 0;
+//             numReceived ++;
+//         }
 
-    }
-    Serial.println("Received " + String(numReceived) + " instructions");
+//     }
+//     Serial.println("Received " + String(numReceived) + " instructions");
 
-    instructionBuffer.push(Instruction{InstructionType::PEN_UP});
-    instructionBuffer.push(Instruction{InstructionType::HOME});
+//     instructionBuffer.push(Instruction{InstructionType::PEN_UP});
+//     instructionBuffer.push(Instruction{InstructionType::HOME});
 
-    return numReceived;
-}
+//     return numReceived;
+// }
 
 void turnOnMotors() {
     digitalWrite(baseStepperConfig.enablePin, LOW);
@@ -170,7 +198,7 @@ void zero() {
 void getReady() {
     turnOnMotors();
     zero();
-    receiveInstructions();
+    // receiveInstructions();
 }
 
 void setup() {
@@ -186,12 +214,11 @@ void setup() {
     // baseStepper.setEnablePin(baseStepperConfig.enablePin);
     // baseStepper.enableOutputs();
     // digitalWrite(baseStepperConfig.enablePin, LOW);
-    baseStepper.setMaxSpeed(baseStepperSpeed);
+    setSpeed(speedWhenPenup);
 
     // elbowStepper.setEnablePin(elbowStepperConfig.enablePin);
     // digitalWrite(elbowStepperConfig.enablePin, LOW);
     // elbowStepper.enableOutputs();
-    elbowStepper.setMaxSpeed(elbowStepperSpeed);
 
     steppers.addStepper(baseStepper);
     steppers.addStepper(elbowStepper);
@@ -236,6 +263,7 @@ void penUp() {
         delay(1);
     }
     Serial.println("Pen up done");
+    setSpeed(speedWhenPenup);
 }
 
 void penDown() {
@@ -245,17 +273,22 @@ void penDown() {
         delay(1);
     }
     Serial.println("Pen down done");
+    setSpeed(speedWhenPendown);
 }
 
 
 class InstructionRunner {
 public:
     Instruction instruction;
-    bool isDone = false;
+    CircularBuffer<Instruction, MAX_TARGETS> instructionBuffer;
 
-    bool run() {
-        if (isDone) {
-            return true;
+    bool noInstructions = true;
+    long numRuns = 0;
+
+    void run() {
+        if (noInstructions) {
+            readInstructions();
+            return;
         }
 
         switch (instruction.type) {
@@ -278,7 +311,7 @@ public:
                 break;
         }
 
-        return false;
+        numRuns++;
     }
 
     void runTarget() {
@@ -307,8 +340,9 @@ public:
                     break;
             }
             initInstruction();
+            noInstructions = false;
         } else {
-            isDone = true;
+            noInstructions = true;
         }
 
     }
@@ -335,13 +369,44 @@ public:
 
         steppers.moveTo(targetSteps);
     }
+
+    void readInstructions() {
+
+        Serial.println("wfc");
+
+        while (Serial.available() == 0) {
+            delay(10);
+        }
+
+        // Serial.println("Reading instructions");
+        String line = Serial.readStringUntil('\n');
+        line.trim();
+        Serial.println("Read line: " + line);
+
+        // splitn the string on whitespace
+        String values[3];
+        int numValues = splitString(line, values, 3, ' ');
+        String cmd = values[0];
+
+        if (cmd == "PU") {
+            instructionBuffer.push(Instruction{InstructionType::PEN_UP});
+        } else if (cmd == "PD") {
+            instructionBuffer.push(Instruction{InstructionType::PEN_DOWN});
+        } else if (cmd == "M") {
+            instructionBuffer.push(Instruction{InstructionType::MOVE_TO, {values[1].toFloat(), values[2].toFloat()}});
+        } else if (cmd == "H") {
+            instructionBuffer.push(Instruction{InstructionType::HOME});
+        }
+
+        noInstructions = false;
+    }
 };
 
 InstructionRunner instructionRunner;
 
 void mainLoop() {
     if (millis() % 50 == 0) {
-        Serial.println(">button_pressed:" + String(isPressed));
+        // Serial.println(">button_pressed:" + String(isPressed));
 
         bool wasPressed = isPressed;
 
@@ -361,11 +426,11 @@ void mainLoop() {
     }
 
     if (motorOn) {
-        bool finished = instructionRunner.run();
-        if (finished) {
-            turnOffMotors();
-            motorOn = false;
-        }
+        instructionRunner.run();
+        // if (finished) {
+        //     turnOffMotors();
+        //     motorOn = false;
+        // }
     }
 }
 

@@ -1,5 +1,5 @@
 {
     "sketch": "firmware/main/main.ino",
     "board": "arduino:avr:uno",
-    "port": "/dev/ttyACM1"
+    "port": "/dev/ttyACM0"
 }
