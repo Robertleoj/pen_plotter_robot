@@ -1,8 +1,29 @@
+#include <CircularBuffer.h>
+#include <Servo.h>
 #include <AccelStepper.h>
 #include <MultiStepper.h>
 #include <math.h>
 
-#define MAX_TARGETS 10000  // Define a maximum number of targets for safety
+#define MAX_TARGETS 50  // Define a maximum number of targets for safety
+
+enum class InstructionType {
+    PEN_UP,
+    PEN_DOWN,
+    MOVE_TO,
+    HOME
+};
+
+struct MoveToInstruction {
+    float baseAngle;
+    float elbowAngle;
+};
+
+struct Instruction {
+    InstructionType type;
+    union {
+        MoveToInstruction moveTo;
+    } data;
+};
 
 struct StepperConfig {
     uint8_t enablePin;
@@ -12,38 +33,47 @@ struct StepperConfig {
     long subdivision;
 };
 
-StepperConfig baseStepperConfig = {.enablePin = 23,
-                                   .stepPin = 22,
-                                   .directionPin = 21,
-                                   .degPerStep = 0.9,
-                                   .subdivision = 32};
+StepperConfig baseStepperConfig = {.enablePin = 13,
+                                   .stepPin = 12,
+                                   .directionPin = 11,
+                                   .degPerStep = 1.8,
+                                   .subdivision = 256};
 
-StepperConfig elbowStepperConfig = {.enablePin = 19,
-                                    .stepPin = 18,
-                                    .directionPin = 5,
-                                    .degPerStep = 0.9,
-                                    .subdivision = 32};
+StepperConfig elbowStepperConfig = {.enablePin = 10,
+                                    .stepPin = 9,
+                                    .directionPin = 8,
+                                    .degPerStep = 1.8,
+                                    .subdivision = 256};
 
 AccelStepper baseStepper(AccelStepper::DRIVER, baseStepperConfig.stepPin,
                          baseStepperConfig.directionPin);
 AccelStepper elbowStepper(AccelStepper::DRIVER, elbowStepperConfig.stepPin,
                           elbowStepperConfig.directionPin);
 
+const int buttonPin = 7;
+bool isPressed = false;
+
+const int servoPin = 3;
+Servo servo;
+const int penUpAngle = 90;
+const int penDownAngle = 0;
+
+
 MultiStepper steppers;
 
-float baseStepperSpeed = 300.0;
-float baseStepperAcceleration = 100.0;
+float baseStepperSpeed = 1500.0;
 
-float elbowStepperSpeed = 300.0;
-float elbowStepperAcceleration = 100.0;
+float elbowStepperSpeed = 1500.0;
+
 uint8_t targetIndex = 0;
 
-int numTargets;
-float targetBuffer[MAX_TARGETS][2];
+bool motorOn = false;
+
+CircularBuffer<Instruction, MAX_TARGETS> instructionBuffer;
 
 long radians2steps(float radians, StepperConfig config) {
     float deg = radians * 180.0 / PI;
-    return (long) ((deg / config.degPerStep) * config.subdivision);
+    return (long)((deg / config.degPerStep) * config.subdivision);
 }
 
 long radiansToStepsBase(float radians, StepperConfig config) {
@@ -56,29 +86,34 @@ long radiansToStepsElbow(float radians, StepperConfig config) {
     return radians2steps(radians, config);
 }
 
-int receiveTargets(float targets[MAX_TARGETS][2]) {
-    // Check if targets pointer is valid
-    if (!targets) return -1;
+int receiveInstructions() {
+    Serial.println("Receiving instructions");
 
-    Serial.println("Receiving targets");
+    instructionBuffer.push(Instruction{InstructionType::PEN_UP});
 
     // wait until data is available
     while (Serial.available() == 0) {
         delay(100);
     }
 
-    int itemIndex = 0;
     int coordinateIndex = 0;
 
-    while (itemIndex < MAX_TARGETS) {  // Prevent buffer overflow
+    int numReceived = 0;
+
+    float coordinates[2];
+
+    while (numReceived < MAX_TARGETS) {  // Prevent buffer overflow
         if (!Serial.available()) {
             delay(10);  // Small delay if no data available
             continue;
         }
 
+        // delay(10);
 
         String line = Serial.readStringUntil('\n');
         line.trim();  // Remove whitespace
+
+        Serial.println("line:" + line + " Index:" + String(numReceived));
 
         // Check for end of transmission or empty line
         if (line.length() == 0) {
@@ -92,68 +127,242 @@ int receiveTargets(float targets[MAX_TARGETS][2]) {
             return -3;  // Parse error
         }
 
-        targets[itemIndex][coordinateIndex] = value;
+        coordinates[coordinateIndex] = value;
 
         coordinateIndex++;
-        if (coordinateIndex == 2) {
-            itemIndex++;
-            coordinateIndex = 0;
-        }
-    }
-    Serial.println("Received " + String(itemIndex) + " targets");
 
-    return itemIndex;
+        if (coordinateIndex == 2) {
+            instructionBuffer.push(Instruction{InstructionType::MOVE_TO, {coordinates[0], coordinates[1]}});
+            if (numReceived == 1) {
+                instructionBuffer.push(Instruction{InstructionType::PEN_DOWN});
+            }
+            coordinateIndex = 0;
+            numReceived ++;
+        }
+
+    }
+    Serial.println("Received " + String(numReceived) + " instructions");
+
+    instructionBuffer.push(Instruction{InstructionType::PEN_UP});
+    instructionBuffer.push(Instruction{InstructionType::HOME});
+
+    return numReceived;
+}
+
+void turnOnMotors() {
+    digitalWrite(baseStepperConfig.enablePin, LOW);
+    digitalWrite(elbowStepperConfig.enablePin, LOW);
+    // baseStepper.enableOutputs();
+    // elbowStepper.enableOutputs();
+    motorOn = true;
+}
+
+void turnOffMotors() {
+    digitalWrite(baseStepperConfig.enablePin, HIGH);
+    digitalWrite(elbowStepperConfig.enablePin, HIGH);
+    // baseStepper.disableOutputs();
+    // elbowStepper.disableOutputs();
+    motorOn = false;
+}
+
+void zero() {
+    baseStepper.setCurrentPosition(0);
+    elbowStepper.setCurrentPosition(0);
+}
+
+void getReady() {
+    turnOnMotors();
+    zero();
+    receiveInstructions();
 }
 
 void setup() {
-    // pinMode(baseStepperConfig.enablePin, OUTPUT);
-    // pinMode(elbowStepperConfig.enablePin, OUTPUT);
-    // pinMode(baseStepperConfig.stepPin, OUTPUT);
-    // pinMode(elbowStepperConfig.stepPin, OUTPUT);
-    // pinMode(baseStepperConfig.directionPin, OUTPUT);
-    // pinMode(elbowStepperConfig.directionPin, OUTPUT);
     Serial.begin(115200);
-    baseStepper.setEnablePin(baseStepperConfig.enablePin);
-    baseStepper.enableOutputs();
+    pinMode(buttonPin, INPUT_PULLUP);
+    pinMode(baseStepperConfig.enablePin, OUTPUT);
+    pinMode(elbowStepperConfig.enablePin, OUTPUT);
+    pinMode(baseStepperConfig.stepPin, OUTPUT);
+    pinMode(elbowStepperConfig.stepPin, OUTPUT);
+    pinMode(baseStepperConfig.directionPin, OUTPUT);
+    pinMode(elbowStepperConfig.directionPin, OUTPUT);
+    // baseStepper.setEnablePin(baseStepperConfig.enablePin);
+    // baseStepper.enableOutputs();
+    // digitalWrite(baseStepperConfig.enablePin, LOW);
     baseStepper.setMaxSpeed(baseStepperSpeed);
-    baseStepper.setAcceleration(baseStepperAcceleration);
-    digitalWrite(baseStepperConfig.enablePin, HIGH);
 
-    elbowStepper.setEnablePin(elbowStepperConfig.enablePin);
-    elbowStepper.enableOutputs();
+    // elbowStepper.setEnablePin(elbowStepperConfig.enablePin);
+    // digitalWrite(elbowStepperConfig.enablePin, LOW);
+    // elbowStepper.enableOutputs();
     elbowStepper.setMaxSpeed(elbowStepperSpeed);
-    elbowStepper.setAcceleration(elbowStepperAcceleration);
-    digitalWrite(elbowStepperConfig.enablePin, HIGH);
 
     steppers.addStepper(baseStepper);
     steppers.addStepper(elbowStepper);
 
+    turnOffMotors();
+
     while (!Serial);
     Serial.println("Serial initialized");
-
-    numTargets = receiveTargets(targetBuffer);
-
 }
+
+// void runDrawing() {
+//     bool stillMoving = steppers.run();
+//     if (!stillMoving) {
+//         long targetSteps[] = {
+//             radiansToStepsBase(targetBuffer[targetIndex][0], baseStepperConfig),
+//             radiansToStepsElbow(targetBuffer[targetIndex][1],
+//                                 elbowStepperConfig)};
+//         Serial.println("Targets: ");
+//         Serial.println("Base: " + String(targetBuffer[targetIndex][0]) +
+//                        " deg, " + String(targetSteps[0]) + " steps");
+//         Serial.println("Elbow: " + String(targetBuffer[targetIndex][1]) +
+//                        " deg, " + String(targetSteps[1]) + " steps");
+//         Serial.println();
+//         Serial.flush();
+
+//         steppers.moveTo(targetSteps);
+
+//         targetIndex = (targetIndex + 1) % numTargets;
+//     }
+// }
+
+void penUp() {
+    Serial.println("Pen up");
+    for (int i = penDownAngle; i <= penUpAngle; i++) {
+        servo.write(i);
+        delay(1);
+    }
+    Serial.println("Pen up done");
+}
+
+void penDown() {
+    Serial.println("Pen down");
+    for (int i = penUpAngle; i >= penDownAngle; i--) {
+        servo.write(i);
+        delay(1);
+    }
+    Serial.println("Pen down done");
+}
+
+
+class InstructionRunner {
+public:
+    Instruction instruction;
+    bool isDone = false;
+
+    bool run() {
+        if (isDone) {
+            return true;
+        }
+
+        switch (instruction.type) {
+            case InstructionType::PEN_UP:
+                penUp();
+                fetchNextInstruction();
+                break;
+
+            case InstructionType::PEN_DOWN:
+                penDown();
+                fetchNextInstruction();
+                break;
+
+            case InstructionType::MOVE_TO:
+                runTarget();
+                break;
+
+            case InstructionType::HOME:
+                runTarget();
+                break;
+        }
+
+        return false;
+    }
+
+    void runTarget() {
+        bool stillMoving = steppers.run();
+        if (!stillMoving) {
+            fetchNextInstruction();
+        }
+    }
+
+    void fetchNextInstruction() {
+        if (instructionBuffer.size() > 0) {
+            instruction = instructionBuffer.shift();
+            Serial.print("Fetched instruction: ");
+            switch (instruction.type) {
+                case InstructionType::MOVE_TO:
+                    Serial.println("Move to " + String(instruction.data.moveTo.baseAngle) + ", " + String(instruction.data.moveTo.elbowAngle));
+                    break;
+                case InstructionType::HOME:
+                    Serial.println("Home");
+                    break;
+                case InstructionType::PEN_UP:
+                    Serial.println("Pen up");
+                    break;
+                case InstructionType::PEN_DOWN:
+                    Serial.println("Pen down");
+                    break;
+            }
+            initInstruction();
+        } else {
+            isDone = true;
+        }
+
+    }
+
+    void initInstruction() {
+        switch (instruction.type) {
+            case InstructionType::MOVE_TO:
+                setTarget(instruction.data.moveTo.baseAngle,
+                          instruction.data.moveTo.elbowAngle);
+                break;
+
+            case InstructionType::HOME:
+                penUp();
+                setTarget(PI / 2, 0);
+                break;
+        }
+    }
+
+    void setTarget(float baseAngle, float elbowAngle) {
+        Serial.println("Setting target: " + String(baseAngle) + ", " + String(elbowAngle));
+        long targetSteps[] = {
+            radiansToStepsBase(baseAngle, baseStepperConfig),
+            radiansToStepsElbow(elbowAngle, elbowStepperConfig)};
+
+        steppers.moveTo(targetSteps);
+    }
+};
+
+InstructionRunner instructionRunner;
 
 void loop() {
     // receive targets from serial
 
-    bool stillMoving = steppers.run();
-    if (!stillMoving) {
-        long targetSteps[] = {
-            radiansToStepsBase(targetBuffer[targetIndex][0], baseStepperConfig),
-            radiansToStepsElbow(targetBuffer[targetIndex][1],
-                                elbowStepperConfig)};
-        Serial.println("Targets: ");
-        Serial.println("Base: " + String(targetBuffer[targetIndex][0]) +
-                       " deg, " + String(targetSteps[0]) + " steps");
-        Serial.println("Elbow: " + String(targetBuffer[targetIndex][1]) +
-                       " deg, " + String(targetSteps[1]) + " steps");
-        Serial.println();
-        Serial.flush();
+    if (millis() % 50 == 0) {
+        // Serial.println(">button_pressed:" + String(isPressed));
 
-        steppers.moveTo(targetSteps);
+        bool wasPressed = isPressed;
 
-        targetIndex = (targetIndex + 1) % numTargets;
+        isPressed = digitalRead(buttonPin) == LOW;
+
+        // Serial.println(">button_pressed:" + String(isPressed) +
+        //                " wasPressed:" + String(wasPressed));
+
+        if (isPressed && !wasPressed) {
+            if (motorOn) {
+                turnOffMotors();
+                motorOn = false;
+            } else {
+                getReady();
+            }
+        }
+    }
+
+    if (motorOn) {
+        bool finished = instructionRunner.run();
+        if (finished) {
+            turnOffMotors();
+            motorOn = false;
+        }
     }
 }

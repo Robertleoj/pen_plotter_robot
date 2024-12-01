@@ -17,6 +17,7 @@ ikpy = "^3.4.2"
 ipympl = "^0.9.4"
 pyserial = "^3.5"
 esptool = "^4.8.1"
+tqdm = "^4.67.1"
 
 
 [tool.poetry.group.dev.dependencies]

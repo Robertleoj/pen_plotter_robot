@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.py": "python",
+        "*.rmd": "markdown",
+        "*.sql": "sql",
+        "*.tpp": "cpp"
+    }
+}
