@@ -55,9 +55,6 @@ bool isPressed = false;
 
 const int servoPin = 3;
 Servo servo;
-const int penUpAngle = 90;
-const int penDownAngle = 0;
-
 
 MultiStepper steppers;
 
@@ -178,6 +175,7 @@ void getReady() {
 
 void setup() {
     Serial.begin(115200);
+    servo.attach(servoPin);
     pinMode(buttonPin, INPUT_PULLUP);
     pinMode(baseStepperConfig.enablePin, OUTPUT);
     pinMode(elbowStepperConfig.enablePin, OUTPUT);
@@ -199,9 +197,11 @@ void setup() {
     steppers.addStepper(elbowStepper);
 
     turnOffMotors();
+    penUp();
 
     while (!Serial);
     Serial.println("Serial initialized");
+
 }
 
 // void runDrawing() {
@@ -225,9 +225,13 @@ void setup() {
 //     }
 // }
 
+const int penUpAngle = 0;
+const int penDownAngle = 90;
+
+
 void penUp() {
     Serial.println("Pen up");
-    for (int i = penDownAngle; i <= penUpAngle; i++) {
+    for (int i = penDownAngle; i >= penUpAngle; i--) {
         servo.write(i);
         delay(1);
     }
@@ -236,7 +240,7 @@ void penUp() {
 
 void penDown() {
     Serial.println("Pen down");
-    for (int i = penUpAngle; i >= penDownAngle; i--) {
+    for (int i = penUpAngle; i <= penDownAngle; i++) {
         servo.write(i);
         delay(1);
     }
@@ -335,11 +339,9 @@ public:
 
 InstructionRunner instructionRunner;
 
-void loop() {
-    // receive targets from serial
-
+void mainLoop() {
     if (millis() % 50 == 0) {
-        // Serial.println(">button_pressed:" + String(isPressed));
+        Serial.println(">button_pressed:" + String(isPressed));
 
         bool wasPressed = isPressed;
 
@@ -365,4 +367,21 @@ void loop() {
             motorOn = false;
         }
     }
+}
+
+void testServoLoop() {
+    int delayTime = 10000;
+    Serial.println("Pen up");
+    penUp();
+    delay(delayTime);
+
+    Serial.println("Pen down");
+    penDown();
+    delay(delayTime);
+}
+
+void loop() {
+    // receive targets from serial
+    // testServoLoop();
+    mainLoop();
 }
