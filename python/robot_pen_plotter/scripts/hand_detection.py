@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import math
+import time
 import mediapipe as mp
 from plotter import Plotter
 
@@ -16,8 +17,8 @@ DISTANCE_THRESHOLD = 0.05
 drawn_lines: list[list[np.ndarray]] = []
 curr_drawn_line = []
 
-def draw_hand(frame: np.ndarray, hand_landmarks: mp.solutions.hands.HandLandmark) -> None:
 
+def draw_hand(frame: np.ndarray, hand_landmarks: mp.solutions.hands.HandLandmark) -> None:
     for id, lm in enumerate(hand_landmarks.landmark):
         h, w, c = frame.shape
         cx, cy = int(lm.x * w), int(lm.y * h)
@@ -67,6 +68,16 @@ def main():
         min_tracking_confidence=0.5,
     )
 
+    # Get video properties
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = 30.0
+
+    # Create VideoWriter object
+    output_filename = f"hand_drawing_{int(time.time())}.mp4"
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out = cv2.VideoWriter(output_filename, fourcc, fps, (frame_width, frame_height))
+
     while True:
         ret, frame = cap.read()
         h, w, _ = frame.shape
@@ -80,15 +91,12 @@ def main():
         results = hands.process(frame_rgb)
 
         if results.multi_hand_landmarks is not None and len(results.multi_hand_landmarks) == 2:
-            hand_1_coords = np.array([
-                [lm.x, lm.y]
-                for lm in results.multi_hand_landmarks[0].landmark
-            ])
+            draw_hand(frame, results.multi_hand_landmarks[0])
+            draw_hand(frame, results.multi_hand_landmarks[1])
 
-            hand_2_coords = np.array([
-                [lm.x, lm.y]
-                for lm in results.multi_hand_landmarks[1].landmark
-            ])
+            hand_1_coords = np.array([[lm.x, lm.y] for lm in results.multi_hand_landmarks[0].landmark])
+
+            hand_2_coords = np.array([[lm.x, lm.y] for lm in results.multi_hand_landmarks[1].landmark])
 
             # hand with lower x-coordinate is the left hand
             if hand_1_coords[:, 0].mean() < hand_2_coords[:, 0].mean():
@@ -97,14 +105,6 @@ def main():
             else:
                 # left_hand_idx, right_hand_idx = 1, 0
                 left_hand_coords, right_hand_coords = hand_2_coords, hand_1_coords
-
-            # left_hand_landmarks = results.multi_hand_landmarks[left_hand_idx]
-            # right_hand_landmarks = results.multi_hand_landmarks[right_hand_idx]
-
-            # draw_hand(frame, left_hand_landmarks)
-            # draw_hand(frame, right_hand_landmarks)
-
-
 
             # check if the left hand is pinching
 
@@ -125,10 +125,14 @@ def main():
 
                 curr_drawn_line.append(right_index_loc)
 
-                plotter.move_to(np.array([
-                    right_index_loc[0],
-                    1 - right_index_loc[1],
-                ]))
+                plotter.move_to(
+                    np.array(
+                        [
+                            right_index_loc[0],
+                            1 - right_index_loc[1],
+                        ]
+                    )
+                )
 
                 if len(curr_drawn_line) == 1:
                     plotter.pendown()
@@ -143,11 +147,11 @@ def main():
         for drawn in drawn_lines:
             for i in range(1, len(drawn)):
                 cv2.line(
-                frame,
-                (int(drawn[i - 1][0] * w), int(drawn[i - 1][1] * h)),
-                (int(drawn[i][0] * w), int(drawn[i][1] * h)),
-                (0, 255, 0),
-                2,
+                    frame,
+                    (int(drawn[i - 1][0] * w), int(drawn[i - 1][1] * h)),
+                    (int(drawn[i][0] * w), int(drawn[i][1] * h)),
+                    (0, 255, 0),
+                    2,
                 )
 
         if len(curr_drawn_line) > 1:
@@ -160,15 +164,17 @@ def main():
                     2,
                 )
 
-        # mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
         cv2.imshow("frame", frame)
-        out = cv2.waitKey(1)
-        if out == ord("q"):
+        out.write(frame)
+
+        out_key = cv2.waitKey(1)
+        if out_key == ord("q"):
             break
 
     plotter.wait_until_done()
     cap.release()
+    out.release()
     cv2.destroyAllWindows()
 
 

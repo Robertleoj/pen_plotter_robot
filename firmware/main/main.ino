@@ -58,10 +58,6 @@ Servo servo;
 
 MultiStepper steppers;
 
-// float baseStepperSpeed = 1500.0;
-
-// float elbowStepperSpeed = 1500.0;
-
 const float speedWhenPendown = 1000.0;
 const float speedWhenPenup = 2000.0;
 
@@ -111,82 +107,16 @@ long radiansToStepsElbow(float radians, StepperConfig config) {
     return radians2steps(radians, config);
 }
 
-// int receiveInstructions() {
-//     Serial.println("Receiving instructions");
-
-//     instructionBuffer.push(Instruction{InstructionType::PEN_UP});
-
-//     // wait until data is available
-//     while (Serial.available() == 0) {
-//         delay(100);
-//     }
-
-//     int coordinateIndex = 0;
-
-//     int numReceived = 0;
-
-//     float coordinates[2];
-
-//     while (numReceived < MAX_TARGETS) {  // Prevent buffer overflow
-//         if (!Serial.available()) {
-//             delay(10);  // Small delay if no data available
-//             continue;
-//         }
-
-//         // delay(10);
-
-//         String line = Serial.readStringUntil('\n');
-//         line.trim();  // Remove whitespace
-
-//         Serial.println("line:" + line + " Index:" + String(numReceived));
-
-//         // Check for end of transmission or empty line
-//         if (line.length() == 0) {
-//             break;
-//         }
-
-//         // Parse float and check for validity
-//         float value = line.toFloat();
-//         if (value == 0 && line.charAt(0) != '0') {  // Basic error check
-//             Serial.println("Parse error");
-//             return -3;  // Parse error
-//         }
-
-//         coordinates[coordinateIndex] = value;
-
-//         coordinateIndex++;
-
-//         if (coordinateIndex == 2) {
-//             instructionBuffer.push(Instruction{InstructionType::MOVE_TO, {coordinates[0], coordinates[1]}});
-//             if (numReceived == 1) {
-//                 instructionBuffer.push(Instruction{InstructionType::PEN_DOWN});
-//             }
-//             coordinateIndex = 0;
-//             numReceived ++;
-//         }
-
-//     }
-//     Serial.println("Received " + String(numReceived) + " instructions");
-
-//     instructionBuffer.push(Instruction{InstructionType::PEN_UP});
-//     instructionBuffer.push(Instruction{InstructionType::HOME});
-
-//     return numReceived;
-// }
 
 void turnOnMotors() {
     digitalWrite(baseStepperConfig.enablePin, LOW);
     digitalWrite(elbowStepperConfig.enablePin, LOW);
-    // baseStepper.enableOutputs();
-    // elbowStepper.enableOutputs();
     motorOn = true;
 }
 
 void turnOffMotors() {
     digitalWrite(baseStepperConfig.enablePin, HIGH);
     digitalWrite(elbowStepperConfig.enablePin, HIGH);
-    // baseStepper.disableOutputs();
-    // elbowStepper.disableOutputs();
     motorOn = false;
 }
 
@@ -198,7 +128,6 @@ void zero() {
 void getReady() {
     turnOnMotors();
     zero();
-    // receiveInstructions();
 }
 
 void setup() {
@@ -211,14 +140,7 @@ void setup() {
     pinMode(elbowStepperConfig.stepPin, OUTPUT);
     pinMode(baseStepperConfig.directionPin, OUTPUT);
     pinMode(elbowStepperConfig.directionPin, OUTPUT);
-    // baseStepper.setEnablePin(baseStepperConfig.enablePin);
-    // baseStepper.enableOutputs();
-    // digitalWrite(baseStepperConfig.enablePin, LOW);
     setSpeed(speedWhenPenup);
-
-    // elbowStepper.setEnablePin(elbowStepperConfig.enablePin);
-    // digitalWrite(elbowStepperConfig.enablePin, LOW);
-    // elbowStepper.enableOutputs();
 
     steppers.addStepper(baseStepper);
     steppers.addStepper(elbowStepper);
@@ -230,27 +152,6 @@ void setup() {
     Serial.println("Serial initialized");
 
 }
-
-// void runDrawing() {
-//     bool stillMoving = steppers.run();
-//     if (!stillMoving) {
-//         long targetSteps[] = {
-//             radiansToStepsBase(targetBuffer[targetIndex][0], baseStepperConfig),
-//             radiansToStepsElbow(targetBuffer[targetIndex][1],
-//                                 elbowStepperConfig)};
-//         Serial.println("Targets: ");
-//         Serial.println("Base: " + String(targetBuffer[targetIndex][0]) +
-//                        " deg, " + String(targetSteps[0]) + " steps");
-//         Serial.println("Elbow: " + String(targetBuffer[targetIndex][1]) +
-//                        " deg, " + String(targetSteps[1]) + " steps");
-//         Serial.println();
-//         Serial.flush();
-
-//         steppers.moveTo(targetSteps);
-
-//         targetIndex = (targetIndex + 1) % numTargets;
-//     }
-// }
 
 const int penUpAngle = 0;
 const int penDownAngle = 90;
@@ -406,14 +307,10 @@ InstructionRunner instructionRunner;
 
 void mainLoop() {
     if (millis() % 50 == 0) {
-        // Serial.println(">button_pressed:" + String(isPressed));
 
         bool wasPressed = isPressed;
 
         isPressed = digitalRead(buttonPin) == LOW;
-
-        // Serial.println(">button_pressed:" + String(isPressed) +
-        //                " wasPressed:" + String(wasPressed));
 
         if (isPressed && !wasPressed) {
             if (motorOn) {
@@ -427,10 +324,6 @@ void mainLoop() {
 
     if (motorOn) {
         instructionRunner.run();
-        // if (finished) {
-        //     turnOffMotors();
-        //     motorOn = false;
-        // }
     }
 }
 
@@ -446,7 +339,5 @@ void testServoLoop() {
 }
 
 void loop() {
-    // receive targets from serial
-    // testServoLoop();
     mainLoop();
 }
