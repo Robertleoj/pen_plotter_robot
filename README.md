@@ -1,4 +1,4 @@
 # Robotic pen plotter
 A hobby project I made, here is a demo video:
 
-![Demo Video](./media/demo.gif)
+<img src="./media/demo.gif" alt="demo" width=1000>
