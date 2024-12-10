@@ -383,5 +383,5 @@ I decided it would be cool if I could draw in the air with my fingers, and the r
 
 I can use my webcam to capture my finger air drawings, but I'll need a way to know where my hands are. For this, we can use an out-of-the box solution: [MediaPipe hand detection](https://mediapipe.readthedocs.io/en/latest/solutions/hands.html). To draw, I decided that I'd draw with my right index finger, and indicate when I wanted the pen down by touching my left index finger to my thumb. I also wanted to signify the end of a drawing - touching the fingertips of your index fingers should do.
 
-I whipped up a script that implemented this, and voila! We get the result you see at the op of the post!
+I whipped up a script that implemented this, and voila! We get the result you see at the top of the post!
 
