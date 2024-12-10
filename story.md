@@ -385,3 +385,4 @@ I can use my webcam to capture my finger air drawings, but I'll need a way to kn
 
 I whipped up a script that implemented this, and voila! We get the result you see at the top of the post!
 
+For anyone interested, here is a [link](https://cad.onshape.com/documents/bdb48f7c4f70c2571c2f3ed1/w/ffb41e5567e0a03980d31e0f/e/92ed5e044ae3405a64fbbf65?renderMode=0&uiState=6758c448b9d28f2f0c499b29) to my CAD design in Onshape.
