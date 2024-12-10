@@ -13,30 +13,30 @@ ARM_LENGTH = 196.15
 FOREARM_LENGTH = 186.321 + 6.1
 
 
-def _forward_kinematics(configuration: np.ndarray, L1: float, L2: float) -> np.ndarray:
+def _forward_kinematics(configuration: np.ndarray, l1: float, l2: float) -> np.ndarray:
     assert configuration.shape == (2,)
-    theta, phi = configuration
+    theta_1, theta_2 = configuration
 
     return np.array(
         [
-            L1 * np.cos(theta) * np.cos(phi) - L1 * np.sin(theta) * np.sin(phi) + L2 * np.cos(theta),
-            L1 * np.sin(theta) * np.cos(phi) + L1 * np.cos(theta) * np.sin(phi) + L2 * np.sin(theta),
+            l1 * np.cos(theta_1) * np.cos(theta_2) - l1 * np.sin(theta_1) * np.sin(theta_2) + l2 * np.cos(theta_1),
+            l1 * np.sin(theta_1) * np.cos(theta_2) + l1 * np.cos(theta_1) * np.sin(theta_2) + l2 * np.sin(theta_1),
         ]
     )
 
 
-def _objective(joint_angles, target, current_angles, L1, L2):
-    end_effector = _forward_kinematics(joint_angles, L1, L2)
+def _objective(joint_angles, target, current_angles, l1, l2):
+    end_effector = _forward_kinematics(joint_angles, l1, l2)
     position_error = np.linalg.norm(end_effector - target)  # Distance to target
     configuration_error = np.linalg.norm(joint_angles - current_angles)  # Stay close to current config
     return position_error + configuration_error
 
 
-def _closest_ik(target, current_angles, L1, L2):
+def _closest_ik(target, current_angles, l1, l2):
     result = minimize(
         _objective,
         current_angles,  # Start from current configuration
-        args=(target, current_angles, L1, L2),
+        args=(target, current_angles, l1, l2),
         method="SLSQP",
         bounds=[(-np.pi / 2, np.pi / 2), (-3 * np.pi / 4, 3 * np.pi / 4)],  # Joint limits
         options={"disp": False},
@@ -45,8 +45,8 @@ def _closest_ik(target, current_angles, L1, L2):
     return result.x if result.success else None
 
 
-def _inverse_kinematics(target: np.ndarray, current_configuration: np.ndarray, L1: float, L2: float) -> np.ndarray:
-    return _closest_ik(target, current_configuration, L1, L2)
+def _inverse_kinematics(target: np.ndarray, current_configuration: np.ndarray, l1: float, l2: float) -> np.ndarray:
+    return _closest_ik(target, current_configuration, l1, l2)
 
 
 class PlotterCommandType(Enum):
@@ -89,8 +89,8 @@ class HomeCommand(PlotterCommand):
 
 
 class Plotter:
-    L1: float
-    L2: float
+    l1: float
+    l2: float
 
     current_configuration: np.ndarray
 
@@ -107,8 +107,8 @@ class Plotter:
         x_input_range: tuple[float, float] = (0, 1),
         y_input_range: tuple[float, float] = (0, 1),
     ) -> None:
-        self.L1 = arm_length
-        self.L2 = forearm_length
+        self.l1 = arm_length
+        self.l2 = forearm_length
         self.serial_port = serial_port
         self.current_configuration = np.array([0, 0])
 
@@ -200,7 +200,7 @@ class Plotter:
         print("Target: ", target_xy)
         target_xy = self.normalize_xy(target_xy)
         print("Normalized: ", target_xy)
-        target = _inverse_kinematics(target_xy, self.current_configuration, self.L1, self.L2)
+        target = _inverse_kinematics(target_xy, self.current_configuration, self.l1, self.l2)
         print("Inverse kinematics: ", target)
 
         self.current_configuration = target

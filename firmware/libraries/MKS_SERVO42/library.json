@@ -1,0 +1,24 @@
+{
+    "name": "MKS_SERVO42",
+    "description": "This library is used to control one or more stepper motors from an Arduino device.",
+    "keywords": "mks, servo, mksservo42,esp,stepper,stepper-motor,motor,control,motor-control,speed,position, nema17",
+    "authors": {
+        "name": "Alireza Ahmadi",
+        "maintainer": true
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/alireza7575/MKS_SERVO42"
+    },
+    "version": "1.0.0",
+    "license": "MIT",
+    "frameworks": "arduino",
+    "platforms": [
+        "espressif32"
+    ],
+    "dependencies": [
+    ],
+    "examples": [
+        "[Ee]xamples/*/*.ino"
+    ]
+}
