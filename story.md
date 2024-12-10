@@ -1,6 +1,6 @@
 I recently made this a vision-controlled pen plotter:
 
-![Demo Video](./media/demo.gif)
+<img src="./media/demo.gif" alt="demo" width=800>
 
 People seemed to like it and were asking about it, so I thought I'd write about it here! 
 
