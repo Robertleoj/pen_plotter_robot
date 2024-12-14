@@ -1,4 +1,4 @@
-I recently made this a vision-controlled pen plotter:
+I recently made this vision-controlled pen plotter:
 
 <img src="./media/demo.gif" alt="demo" width=800>
 
