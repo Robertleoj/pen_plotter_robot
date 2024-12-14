@@ -186,6 +186,9 @@ I know! I'll attach a little seat to the lower arm with a hole in the bottom for
 This is sort of what I had in mind:
 
 
+<img src="./media/elbow_idea.jpg" alt="elbow_idea" width="500">
+
+
 I put on my CAD hat again and design both the seat and the forearm attachment. The prints came out like this:
 
 
