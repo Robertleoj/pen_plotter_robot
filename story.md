@@ -144,7 +144,7 @@ During calibration, the shaft should rotate slowly. Mine didn't - it just jerked
 I looked online, and found this in the documentation:
 
 ```
-* err4“Phase Line Error！”
+* err5“Reverse Lookup Error！”
 
   if it keeps show “Phase Line Error”,please adjust the 4pin motor cable wiring sequence.
 ```
@@ -314,13 +314,14 @@ Now I can pick a value for $\theta_1$ and $\theta_2$, and know where the robot w
 Here is an implementation of the forward kinematics in a python function:
 
 ```python
+
 def forward_kinematics(configuration: np.ndarray, l1: float, l2: float) -> np.ndarray:
     theta_1, theta_2 = configuration
 
     return np.array(
         [
-            L1 * np.cos(theta) * np.cos(phi) - L1 * np.sin(theta) * np.sin(phi) + L2 * np.cos(theta),
-            L1 * np.sin(theta) * np.cos(phi) + L1 * np.cos(theta) * np.sin(phi) + L2 * np.sin(theta),
+            l1 * np.cos(theta_1) * np.cos(theta_2) - l1 * np.sin(theta_1) * np.sin(theta_2) + l2 * np.cos(theta_1),
+            l1 * np.sin(theta_1) * np.cos(theta_2) + l1 * np.cos(theta_1) * np.sin(theta_2) + l2 * np.sin(theta_1),
         ]
     )
 ```
